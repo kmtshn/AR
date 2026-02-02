@@ -1,196 +1,28 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>名刺AR（QR起動）サンプル</title>
-  <style>
-    :root { --pad: 16px; }
-    html, body { height: 100%; margin: 0; background: #000; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; }
-    .wrap { position: fixed; inset: 0; overflow: hidden; }
-    video {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
-      transform: scaleX(-1); /* インカメ/アウトカメで好みなら消してOK */
-      background: #000;
-    }
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebAR Demo</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
+  </head>
+  <body>
+    <a-scene mindar-image="imageTargetSrc: ./targets.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+      
+      <a-assets>
+        </a-assets>
 
-    /* “浮かぶ文字”レイヤー */
-    .hud {
-      position: absolute; inset: 0;
-      display: grid;
-      place-items: center;
-      pointer-events: none;
-    }
-    .float {
-      pointer-events: auto; /* ボタンを押せるように */
-      max-width: min(92vw, 640px);
-      margin: 0 var(--pad);
-      padding: 18px 18px;
-      border-radius: 18px;
-      color: #fff;
-      text-align: center;
-      line-height: 1.35;
-      letter-spacing: .02em;
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      /* “それっぽい浮遊感” */
-      background: rgba(0,0,0,.35);
-      backdrop-filter: blur(10px);
-      box-shadow: 0 18px 50px rgba(0,0,0,.45);
-      border: 1px solid rgba(255,255,255,.18);
-      transform: translate3d(0,0,0);
-      animation: bob 2.6s ease-in-out infinite;
-    }
-    @keyframes bob {
-      0%,100% { transform: translate3d(0,-6px,0); }
-      50% { transform: translate3d(0,6px,0); }
-    }
-    .title { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
-    .sub   { font-size: 14px; opacity: .9; margin: 0 0 12px; }
-    .chips { display:flex; gap:8px; flex-wrap: wrap; justify-content:center; margin-top: 10px; }
-    .chip  {
-      font-size: 12px; padding: 6px 10px; border-radius: 999px;
-      background: rgba(255,255,255,.12);
-      border: 1px solid rgba(255,255,255,.14);
-    }
+      <a-entity mindar-image-target="targetIndex: 0">
+        
+        <a-plane color="blue" opaciy="0.5" position="0 0 0" height="1" width="1" rotation="0 0 0" material="transparent: true; opacity: 0.3"></a-plane>
+        
+        <a-box position="0 0 0.5" rotation="0 45 0" color="#4CC3D9" animation="property: rotation; to: 0 405 0; loop: true; dur: 2000"></a-box>
+        
+        <a-text value="Success!" color="white" align="center" width="6" position="0 -0.6 0"></a-text>
 
-    /* 起動・エラー表示 */
-    .topbar {
-      position: absolute; top: 0; left: 0; right: 0;
-      display: flex; gap: 10px; align-items: center;
-      padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) var(--pad);
-      pointer-events: none;
-    }
-    .badge {
-      pointer-events: auto;
-      font-size: 12px;
-      padding: 8px 10px;
-      border-radius: 999px;
-      background: rgba(0,0,0,.35);
-      border: 1px solid rgba(255,255,255,.16);
-      color: #fff;
-      backdrop-filter: blur(10px);
-    }
-    button {
-      cursor: pointer;
-      border: 0;
-      color: #fff;
-      background: rgba(255,255,255,.16);
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 999px;
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-    .hint {
-      position: absolute; left: 0; right: 0; bottom: 0;
-      padding: var(--pad) var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
-      color: rgba(255,255,255,.9);
-      font-size: 12px;
-      text-align: center;
-      background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
-      pointer-events: none;
-    }
-    .hidden { display: none !important; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <video id="cam" autoplay playsinline muted></video>
-
-    <div class="topbar">
-      <div id="status" class="badge">カメラ準備中…</div>
-      <button id="flip" class="badge" type="button" style="pointer-events:auto;">カメラ切替</button>
-      <button id="mute" class="badge" type="button" style="pointer-events:auto;">ゆらゆらOFF</button>
-    </div>
-
-    <div class="hud">
-      <div id="card" class="float">
-        <p class="title" id="t1">Shun / CE & DX</p>
-        <p class="sub" id="t2">名刺QRから起動する “文字が浮かぶ” デモ</p>
-        <div class="chips" id="chips">
-          <span class="chip">保守</span>
-          <span class="chip">自動化</span>
-          <span class="chip">GAS</span>
-          <span class="chip">Python</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="hint">※ 初回は「カメラの許可」が必要です（HTTPSで動作）</div>
-  </div>
-
-  <script>
-    // --- クエリで表示文字を差し替え可能 ---
-    // 例: https://example.com/index.html?name=Shun&line=プリンター保守と自動化やってます&tags=GAS,Python,Redmine
-    const qs = new URLSearchParams(location.search);
-    const name = qs.get("name");
-    const line = qs.get("line");
-    const tags = qs.get("tags");
-
-    if (name) document.getElementById("t1").textContent = name;
-    if (line) document.getElementById("t2").textContent = line;
-
-    if (tags) {
-      const chips = document.getElementById("chips");
-      chips.innerHTML = "";
-      tags.split(",").map(s => s.trim()).filter(Boolean).slice(0, 12).forEach(t => {
-        const span = document.createElement("span");
-        span.className = "chip";
-        span.textContent = t;
-        chips.appendChild(span);
-      });
-    }
-
-    // --- カメラ起動 ---
-    const video = document.getElementById("cam");
-    const statusEl = document.getElementById("status");
-    const flipBtn = document.getElementById("flip");
-    const muteBtn = document.getElementById("mute");
-    const card = document.getElementById("card");
-
-    let facingMode = "environment"; // 背面カメラ
-    let stream = null;
-    let bobEnabled = true;
-
-    async function startCamera() {
-      try {
-        statusEl.textContent = "カメラ起動中…";
-        if (stream) {
-          stream.getTracks().forEach(t => t.stop());
-          stream = null;
-        }
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false
-        });
-
-        video.srcObject = stream;
-        await video.play();
-        statusEl.textContent = "カメラON";
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "カメラ起動に失敗（HTTPS / 権限を確認）";
-        alert("カメラが起動できませんでした。\n・HTTPSで開いているか\n・カメラ許可がONか\nを確認してください。");
-      }
-    }
-
-    flipBtn.addEventListener("click", async () => {
-      facingMode = (facingMode === "environment") ? "user" : "environment";
-      // インカメは左右反転が自然、アウトカメは反転不要好み
-      // 今は video に scaleX(-1) を当ててるので、必要ならここで切替もできる
-      await startCamera();
-    });
-
-    muteBtn.addEventListener("click", () => {
-      bobEnabled = !bobEnabled;
-      card.style.animation = bobEnabled ? "bob 2.6s ease-in-out infinite" : "none";
-      muteBtn.textContent = bobEnabled ? "ゆらゆらOFF" : "ゆらゆらON";
-    });
-
-    // iOS Safari対策: ユーザー操作が必要になることがあるので、最初に自動→ダメならタップ誘導でもOK
-    startCamera();
-  </script>
-</body>
+      </a-entity>
+    </a-scene>
+  </body>
 </html>
